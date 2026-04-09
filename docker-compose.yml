@@ -1,0 +1,90 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: wordpress_local_8099
+      MYSQL_USER: wp_user_8099
+      MYSQL_PASSWORD: wp_pass_8099
+      MYSQL_ROOT_PASSWORD: root_pass_8099
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot_pass_8099 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  wordpress:
+    image: wordpress:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8099:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress_local_8099
+      WORDPRESS_DB_USER: wp_user_8099
+      WORDPRESS_DB_PASSWORD: wp_pass_8099
+    volumes:
+      - wp_data:/var/www/html
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./php/custom.ini:/usr/local/etc/php/conf.d/custom.ini
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8091:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: root_pass_8099
+
+  wpcli_setup:
+    image: wordpress:cli
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    working_dir: /var/www/html
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress_local_8099
+      WORDPRESS_DB_USER: wp_user_8099
+      WORDPRESS_DB_PASSWORD: wp_pass_8099
+    volumes:
+      - wp_data:/var/www/html
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      echo 'Aguardando arquivos do WordPress...';
+      until [ -f /var/www/html/wp-load.php ]; do sleep 5; done;
+
+      if [ ! -f /var/www/html/wp-config.php ]; then
+        wp config create --path=/var/www/html --dbname=wordpress_local_8099 --dbuser=wp_user_8099 --dbpass=wp_pass_8099 --dbhost=db:3306 --skip-check --allow-root;
+      fi;
+
+      echo 'Aguardando banco responder...';
+      until MYSQL_PWD=wp_pass_8099 mysqladmin ping -h db -u wp_user_8099 --ssl=0 --silent >/dev/null 2>&1; do sleep 5; done;
+
+      if ! wp core is-installed --path=/var/www/html --allow-root >/dev/null 2>&1; then
+        wp core install --path=/var/www/html --url=http://localhost:8099 --title='Meu WordPress Local' --admin_user=admin --admin_password='Admin123!@#' --admin_email=admin@example.com --skip-email --allow-root;
+        wp option update blogdescription 'WordPress local com Docker' --path=/var/www/html --allow-root;
+      fi;
+
+      echo 'Instalacao concluida.';
+      "
+
+volumes:
+  db_data:
+  wp_data:

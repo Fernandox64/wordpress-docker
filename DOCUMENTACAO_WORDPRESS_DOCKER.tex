@@ -1,0 +1,172 @@
+﻿\documentclass[12pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\setlist[itemize]{noitemsep,topsep=4pt}
+\titleformat{\section}{\large\bfseries}{}{0em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\title{Guia de WordPress Local com Docker\\\large Instala\c{c}\~ao, Uso e Testes}
+\author{Projeto \texttt{wordpress\_docker\_8099\_corrigido}}
+\date{9 de abril de 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Objetivo}
+Este documento explica como funciona um ambiente WordPress executando em Docker e como um usu\'ario novo pode baixar, instalar e usar esta vers\~ao localmente para testes.
+
+\section{Vis\~ao geral da arquitetura}
+Este projeto usa \texttt{docker-compose} para orquestrar quatro servi\c{c}os:
+\begin{itemize}
+  \item \textbf{db} (MySQL 8.4): banco de dados da aplica\c{c}\~ao.
+  \item \textbf{wordpress} (imagem oficial WordPress): aplica\c{c}\~ao principal servida em HTTP.
+  \item \textbf{phpmyadmin}: interface web para inspe\c{c}\~ao e administra\c{c}\~ao do banco.
+  \item \textbf{wpcli\_setup}: container tempor\'ario que automatiza a instala\c{c}\~ao inicial do WordPress.
+\end{itemize}
+
+\subsection{Portas padr\~ao deste projeto}
+\begin{itemize}
+  \item WordPress: \url{http://localhost:8099}
+  \item Admin do WordPress: \url{http://localhost:8099/wp-admin}
+  \item phpMyAdmin: \url{http://localhost:8091}
+\end{itemize}
+
+\subsection{Volumes persistentes}
+\begin{itemize}
+  \item \texttt{db\_data}: dados do MySQL.
+  \item \texttt{wp\_data}: arquivos do WordPress (plugins, temas, uploads e configura\c{c}\~oes).
+\end{itemize}
+
+\section{Como o fluxo de inicializa\c{c}\~ao funciona}
+Ao executar \texttt{docker compose up -d}, ocorre o fluxo:
+\begin{enumerate}
+  \item O MySQL sobe e passa no healthcheck.
+  \item O container \texttt{wordpress} sobe e publica o site na porta 8099.
+  \item O container \texttt{wpcli\_setup} aguarda os arquivos e o banco ficarem dispon\'iveis.
+  \item O \texttt{wpcli\_setup} cria/verifica \texttt{wp-config.php}.
+  \item Se o WordPress ainda n\~ao estiver instalado, roda \texttt{wp core install} automaticamente.
+  \item Depois disso, voc\^e acessa diretamente o WordPress sem assistente de configura\c{c}\~ao.
+\end{enumerate}
+
+\section{Pr\'e-requisitos}
+Antes de instalar, garanta:
+\begin{itemize}
+  \item Docker Desktop instalado e em execu\c{c}\~ao.
+  \item Docker Compose v2 (normalmente j\'a vem no Docker Desktop).
+  \item Git (para clonar o reposit\'orio).
+  \item Portas 8099 e 8091 livres no host.
+\end{itemize}
+
+\section{Como baixar o projeto}
+\subsection{Op\c{c}\~ao 1: via Git}
+\begin{verbatim}
+git clone <URL_DO_REPOSITORIO>
+cd wordpress_docker_8099_corrigido
+\end{verbatim}
+
+\subsection{Op\c{c}\~ao 2: ZIP}
+Baixe o ZIP do projeto, extraia em uma pasta local e abra um terminal dentro da pasta \texttt{wordpress\_docker\_8099\_corrigido}.
+
+\section{Instala\c{c}\~ao local para testes}
+\subsection{Subir o ambiente}
+No diret\'orio do projeto, execute:
+\begin{verbatim}
+docker compose up -d
+\end{verbatim}
+
+\subsection{Aguardar containers saud\'aveis}
+Verifique status:
+\begin{verbatim}
+docker compose ps
+\end{verbatim}
+
+\subsection{Acessar aplica\c{c}\~ao}
+\begin{itemize}
+  \item Site: \url{http://localhost:8099}
+  \item Admin: \url{http://localhost:8099/wp-admin}
+\end{itemize}
+
+\subsection{Credenciais padr\~ao do admin}
+\begin{itemize}
+  \item Usu\'ario: \texttt{admin}
+  \item Senha: \texttt{Admin123!@\#}
+  \item E-mail: \texttt{admin@example.com}
+\end{itemize}
+
+\section{Comandos \~uteis no dia a dia}
+\subsection{Ver logs}
+\begin{verbatim}
+docker compose logs -f
+docker compose logs -f wordpress
+docker compose logs -f db
+\end{verbatim}
+
+\subsection{Parar ambiente}
+\begin{verbatim}
+docker compose down
+\end{verbatim}
+
+\subsection{Parar e remover volumes (reset completo)}
+\begin{verbatim}
+docker compose down -v
+\end{verbatim}
+Use este comando quando quiser reiniciar do zero e perder dados locais de teste.
+
+\subsection{Recriar servi\c{c}os com ajustes recentes}
+\begin{verbatim}
+docker compose up -d --force-recreate
+\end{verbatim}
+
+\section{Estrutura dos servi\c{c}os no \texttt{docker-compose.yml}}
+\begin{itemize}
+  \item \texttt{db}: define banco, usu\'ario, senha e healthcheck do MySQL.
+  \item \texttt{wordpress}: conecta ao banco e publica a aplica\c{c}\~ao em \texttt{8099:80}.
+  \item \texttt{phpmyadmin}: conecta no \texttt{db} e publica em \texttt{8091:80}.
+  \item \texttt{wpcli\_setup}: realiza instala\c{c}\~ao autom\'atica e evita tela inicial de setup.
+\end{itemize}
+
+\section{Solu\c{c}\~ao de problemas comuns}
+\subsection{Container \texttt{db} fica \texttt{unhealthy}}
+Poss\'ivel causa: estado inconsistente no volume de banco.
+\begin{verbatim}
+docker compose down -v
+docker compose up -d
+\end{verbatim}
+
+\subsection{WordPress abre assistente de configura\c{c}\~ao}
+Verifique se o \texttt{wpcli\_setup} concluiu:
+\begin{verbatim}
+docker logs wordpress_docker_8099_corrigido-wpcli_setup-1
+\end{verbatim}
+Procure por \texttt{WordPress installed successfully} e \texttt{Instalacao concluida}.
+
+\subsection{Porta em uso}
+Se 8099 ou 8091 estiver ocupada, ajuste o mapeamento de portas no \texttt{docker-compose.yml}.
+
+\section{Boas pr\'aticas para novos usu\'arios}
+\begin{itemize}
+  \item Sempre iniciar com \texttt{docker compose up -d}.
+  \item Antes de suporte, coletar \texttt{docker compose ps} e \texttt{docker compose logs -f db wordpress}.
+  \item Usar \texttt{down -v} apenas quando quiser reset total dos dados.
+  \item Manter plugins e temas de teste versionados quando poss\'ivel.
+\end{itemize}
+
+\section{Resumo r\'apido}
+\begin{enumerate}
+  \item Baixe o projeto.
+  \item Execute \texttt{docker compose up -d}.
+  \item Acesse \url{http://localhost:8099}.
+  \item Entre no admin com \texttt{admin / Admin123!@\#}.
+\end{enumerate}
+
+\end{document}
